@@ -1,0 +1,349 @@
+#include "Adafruit_GFX.h"
+#include "Adafruit_ILI9341.h"
+#include <Fonts/FreeSans9pt7b.h>
+#include "CenturyGothic9pt7b.h"
+#include "CenturyGothicBold9pt7b.h"
+#include "RTClib.h"
+
+// Which button has been pressed
+enum Button { power, brew, water, clean, none };
+
+// Pins connected to the buttons
+#define BUTTON_POWER 35
+#define BUTTON_COFFEE 34
+#define BUTTON_WATER 39
+#define BUTTON_CLEAN 36
+
+#define LED_POWER 5
+#define LED_COFFEE 17
+#define LED_WATER 16
+#define LED_CLEAN 21
+
+
+
+// Configuration of the screen
+#define TFT_DC  2
+#define TFT_CS 15
+#define TFT_RESET 4
+
+// Duration of the processes
+#define COFFEE_DURATION 5000
+#define WATER_DURATION 10000
+
+
+// Position of items on the screen
+const int topRow = 80;
+const int middleRow = 100;
+const int bottomRow = 120;
+const int progressRow = 140;
+
+const int timeX = 80;
+
+const int barX = 10;
+const int barHeight = 30;
+const int barWidth = ILI9341_TFTHEIGHT-((10+16)*2);
+const int barSpacing = 4;
+const int barRounding = 12;
+
+const int aeroTextX = 100;
+const int brewingTextX = 100;
+const int cleaningTextX = 94;
+
+// tft screen
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RESET);
+
+// buffer to prevent flickering of the screen
+// set to heigth 175 in stead of 240. Setting it higher makes in realy slow. I don't know why.
+GFXcanvas16 canvas(320, 175);
+
+
+
+
+Button getButton() {
+  if (digitalRead(BUTTON_POWER) == HIGH) {
+  Serial.println("power");
+    return power;
+  } else if (digitalRead(BUTTON_COFFEE) == HIGH) {
+  Serial.println("coffee");
+    return brew;
+  } else if (digitalRead(BUTTON_WATER) == HIGH) {
+  Serial.println("water");
+    return water;
+  } else if (digitalRead(BUTTON_CLEAN) == HIGH) {
+  Serial.println("clean");
+    return clean;
+  } else {
+    return none;
+  }
+}
+
+
+void show() {
+  tft.drawRGBBitmap(0, 0, canvas.getBuffer(), 320, 175);
+}
+
+void displayClear() {
+  tft.fillScreen(ILI9341_BLACK);
+}
+
+
+void drawProgressBar(int progress, int y) {
+  canvas.drawRoundRect(barX, y,((100*barWidth)/100)+((barSpacing+barRounding)*2), barHeight, barRounding, ILI9341_DARKGREY);
+  canvas.fillRoundRect(barX+barSpacing, y+barSpacing, ((progress*barWidth)/100)+((barRounding)*2), barHeight-(barSpacing * 2), barRounding-(barSpacing * 2), ILI9341_WHITE);
+}
+
+void displayBrewingProgress(long currentTime, long endTime) {
+  int progress = ((currentTime)*100)/endTime;
+  canvas.fillScreen(ILI9341_BLACK);
+  canvas.setFont(&CenturyGothicBold9pt7b);
+  printCenter("Brewing Coffee", topRow);
+  canvas.setFont(&CenturyGothic9pt7b);
+  TimeSpan ts = TimeSpan((endTime - currentTime)/1000);
+  char time[30];
+  sprintf(time, "%02d:%02d until finished", ts.minutes(), ts.seconds());
+  printCenter(time, middleRow);
+
+  drawProgressBar(progress, progressRow);
+  show();
+}
+
+void displayWaterProgress(long currentTime, long endTime) {
+  int progress = ((currentTime)*100)/endTime;
+  canvas.fillScreen(ILI9341_BLACK);
+  canvas.setFont(&CenturyGothicBold9pt7b);
+  printCenter("Hot Water", topRow);
+  canvas.setFont(&CenturyGothic9pt7b);
+  TimeSpan ts = TimeSpan((endTime - currentTime)/1000);
+  char time[30];
+  sprintf(time, "%02d:%02d until finished", ts.minutes(), ts.seconds());
+  printCenter(time, middleRow);
+  printCenter("press again to stop", bottomRow);
+
+  drawProgressBar(progress, progressRow);
+  show();
+}
+
+
+void displayCleaning() {
+  canvas.fillScreen(ILI9341_BLACK);
+  canvas.setFont(&CenturyGothicBold9pt7b);
+  printCenter("Cleaning", topRow);
+  canvas.setFont(&CenturyGothic9pt7b);
+  printCenter("press again to stop", middleRow);
+  show();
+}
+
+
+void displayFinished(String action) {
+  canvas.fillScreen(ILI9341_BLACK);
+  canvas.setFont(&CenturyGothicBold9pt7b);
+  char text[30];
+  canvas.setFont(&CenturyGothicBold9pt7b);
+  sprintf(text, "%s Finished", action);
+  printCenter(text, bottomRow);
+  show();
+}
+
+void printCenter(String text, int y) {
+  int16_t  x1, y1;
+  uint16_t w, h;
+  canvas.getTextBounds(text, 0, 100, &x1, &y1, &w, &h);
+  canvas.setCursor((320-w)/2, y);
+  canvas.print(text);
+}
+
+void displayStart() {
+  canvas.fillScreen(ILI9341_BLACK);
+  canvas.setFont(&CenturyGothicBold9pt7b);
+  printCenter("Aeroblend", topRow);
+  canvas.setFont(&CenturyGothic9pt7b);
+  printCenter("ready for tasks", bottomRow);
+  show();
+}
+
+
+
+
+
+class State {
+  public:
+    State() {}
+    virtual void run(Button button) = 0;
+};
+
+void setState(State *newState);
+
+void runState(Button button);
+
+
+class OffState: public State {
+  public:
+    void run(Button button);
+};
+
+class OnState: public State {
+  public:
+    void run(Button button);
+};
+
+class CoffeeState: public State {
+  private:
+    long _startTime;
+  public:
+    CoffeeState(long startTime): _startTime(startTime) {}
+    void run(Button button);
+};
+
+class CleaningState: public State {
+  public:
+    void run(Button button);
+};
+
+class WaterState: public State {
+  private:
+    long _startTime;
+  public:
+    WaterState(long startTime): _startTime(startTime) {}
+    void run(Button button);
+};
+
+
+State *currentState;
+
+void OffState::run(Button button) {
+  digitalWrite(LED_POWER, LOW);
+  digitalWrite(LED_COFFEE, LOW);
+  digitalWrite(LED_CLEAN, LOW);
+  digitalWrite(LED_WATER, LOW);
+  displayClear();
+  if (button == power) {
+    digitalWrite(LED_POWER, HIGH);
+    displayStart();
+    setState(new OnState());
+  }
+}
+
+void OnState::run(Button button) {
+  switch (button) {
+    case power:
+      setState(new OffState());
+      return;
+    case brew:
+      digitalWrite(LED_COFFEE, HIGH);
+      setState(new CoffeeState(millis()));
+      return;
+    case clean:
+      digitalWrite(LED_CLEAN, HIGH);
+      setState(new CleaningState());
+      return;
+    case water:
+      digitalWrite(LED_WATER, HIGH);
+      setState(new WaterState(millis()));
+      return;
+  }
+}
+
+void CoffeeState::run(Button button) {
+  if (button == power) {
+    setState(new OffState());
+    return;
+  }
+
+  long currentTime = millis() - _startTime;
+  if (currentTime >= COFFEE_DURATION) {
+    digitalWrite(LED_COFFEE, LOW);
+    displayFinished("Coffee");
+    setState(new OnState());
+    return;
+  }
+
+  displayBrewingProgress(currentTime, COFFEE_DURATION);
+}
+
+void CleaningState::run(Button button) {
+  if (button == power) {
+    setState(new OffState());
+    return;
+  } else if (button == clean) {
+    digitalWrite(LED_CLEAN, LOW);
+    displayFinished("Cleaning");
+    setState(new OnState());
+    return;
+  }
+  displayCleaning();
+}
+
+void WaterState::run(Button button) {
+  if (button == power) {
+    setState(new OffState());
+    return;
+  } else if (button == water) {
+    digitalWrite(LED_WATER, LOW);
+    displayFinished("Water");
+    setState(new OnState());
+   return;
+  }
+
+  long currentTime = millis() - _startTime;
+  if (currentTime >= WATER_DURATION) {
+    digitalWrite(LED_WATER, LOW);
+    displayFinished("Water");
+    setState(new OnState());
+    return;
+  }
+
+  displayWaterProgress(currentTime, WATER_DURATION);
+}
+
+void runState(Button button) {
+  currentState->run(button);
+}
+
+void setState(State *newState) {
+  delete(currentState);
+  currentState = (State *)newState;
+}
+
+
+
+
+
+void setup() {
+  pinMode(BUTTON_POWER, INPUT_PULLUP);
+  pinMode(BUTTON_COFFEE, INPUT_PULLUP);
+  pinMode(BUTTON_WATER, INPUT_PULLUP);
+  pinMode(BUTTON_CLEAN, INPUT_PULLUP);
+  
+  pinMode(LED_POWER, OUTPUT);
+  pinMode(LED_COFFEE, OUTPUT);
+  pinMode(LED_WATER, OUTPUT);
+  pinMode(LED_CLEAN, OUTPUT);
+
+  digitalWrite(LED_POWER, LOW);
+  digitalWrite(LED_COFFEE, LOW);
+  digitalWrite(LED_WATER, LOW);
+  digitalWrite(LED_CLEAN, LOW);
+  
+  Serial.begin(115200);
+  tft.begin();
+  tft.setRotation(3);
+  tft.fillScreen(ILI9341_BLACK);
+  canvas.setFont(&CenturyGothic9pt7b);
+  canvas.setTextColor(ILI9341_WHITE);
+
+  setState(new OffState());
+}
+
+Button previousButton = none;
+
+void loop() {
+  Button button = getButton();
+  if (button == previousButton) {
+    button = none;
+  } else {
+    previousButton = button;
+  }
+  runState(button);
+
+  delay(100);
+}
