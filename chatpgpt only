@@ -1,0 +1,296 @@
+#include "Adafruit_GFX.h"
+#include "Adafruit_ILI9341.h"
+#include <Fonts/FreeSans9pt7b.h>
+#include "CenturyGothic9pt7b.h"
+#include "CenturyGothicBold9pt7b.h"
+#include "RTClib.h"
+
+// Which button has been pressed
+enum Button { POWER, BREW, WATER, CLEAN, NONE };
+
+// Pins connected to the buttons
+const int BUTTON_POWER = 35;
+const int BUTTON_COFFEE = 34;
+const int BUTTON_WATER = 39;
+const int BUTTON_CLEAN = 36;
+
+// LEDs
+const int LED_POWER = 5;
+const int LED_COFFEE = 17;
+const int LED_WATER = 16;
+const int LED_CLEAN = 21;
+
+// Configuration of the screen
+const int TFT_DC = 2;
+const int TFT_CS = 15;
+const int TFT_RESET = 4;
+
+// Duration of the processes
+const long COFFEE_DURATION = 5000;
+const long WATER_DURATION = 10000;
+
+// Position of items on the screen
+const int TOP_ROW = 80;
+const int MIDDLE_ROW = 100;
+const int BOTTOM_ROW = 120;
+const int PROGRESS_ROW = 140;
+
+const int TIME_X = 80;
+
+const int BAR_X = 10;
+const int BAR_HEIGHT = 30;
+const int BAR_WIDTH = ILI9341_TFTWIDTH - ((10 + 16) * 2);
+const int BAR_SPACING = 4;
+const int BAR_ROUNDING = 12;
+
+const int AERO_TEXT_X = 100;
+const int BREWING_TEXT_X = 100;
+const int CLEANING_TEXT_X = 94;
+
+// TFT screen
+Adafruit_ILI9341 tft(TFT_CS, TFT_DC, TFT_RESET);
+
+// Buffer to prevent flickering of the screen
+GFXcanvas16 canvas = GFXcanvas16(ILI9341_TFTWIDTH, ILI9341_TFTHEIGHT);
+
+class State {
+public:
+  virtual void run(Button button) = 0;
+};
+
+class OffState : public State {
+public:
+  void run(Button button);
+};
+
+class OnState : public State {
+public:
+  void run(Button button);
+};
+
+class CoffeeState : public State {
+private:
+  unsigned long _startTime;
+public:
+  CoffeeState(unsigned long startTime) : _startTime(startTime) {}
+  void run(Button button);
+};
+
+class CleaningState : public State {
+public:
+  void run(Button button);
+};
+
+class WaterState : public State {
+private:
+  unsigned long _startTime;
+public:
+  WaterState(unsigned long startTime) : _startTime(startTime) {}
+  void run(Button button);
+};
+
+State* currentState;
+
+void setState(State* newState);
+
+Button getButton() {
+  if (digitalRead(BUTTON_POWER) == HIGH) {
+    return POWER;
+  } else if (digitalRead(BUTTON_COFFEE) == HIGH) {
+    return BREW;
+  } else if (digitalRead(BUTTON_WATER) == HIGH) {
+    return WATER;
+  } else if (digitalRead(BUTTON_CLEAN) == HIGH) {
+    return CLEAN;
+  } else {
+    return NONE;
+  }
+}
+
+void show() {
+  tft.drawRGBBitmap(0, 0, canvas.getBuffer(), ILI9341_TFTWIDTH, ILI9341_TFTHEIGHT);
+}
+
+void displayClear() {
+  tft.fillScreen(ILI9341_BLACK);
+}
+
+void drawProgressBar(int progress, int y) {
+  canvas.drawRoundRect(BAR_X, y, ((progress * BAR_WIDTH) / 100) + ((BAR_SPACING + BAR
+const int bottomRow = 120;
+const int progressRow = 140;
+
+const int timeX = 80;
+
+const int barX = 10;
+const int barHeight = 30;
+const int barWidth = ILI9341_TFTWIDTH - ((10 + 16) * 2);
+const int barSpacing = 4;
+const int barRounding = 12;
+
+const int aeroTextX = 100;
+const int brewingTextX = 100;
+const int cleaningTextX = 94;
+
+// TFT screen
+Adafruit_ILI9341 tft(TFT_CS, TFT_DC, TFT_RESET);
+
+// Buffer to prevent flickering of the screen
+GFXcanvas16 canvas = GFXcanvas16(ILI9341_TFTWIDTH, ILI9341_TFTHEIGHT);
+
+class State {
+public:
+  virtual void run(Button button) = 0;
+};
+
+class OffState : public State {
+public:
+  void run(Button button);
+};
+
+class OnState : public State {
+public:
+  void run(Button button);
+};
+
+class CoffeeState : public State {
+private:
+  unsigned long _startTime;
+public:
+  CoffeeState(unsigned long startTime) : _startTime(startTime) {}
+  void run(Button button);
+};
+
+class CleaningState : public State {
+public:
+  void run(Button button);
+};
+
+class WaterState : public State {
+private:
+  unsigned long _startTime;
+public:
+  WaterState(unsigned long startTime) : _startTime(startTime) {}
+  void run(Button button);
+};
+
+State* currentState;
+
+void setState(State* newState);
+
+Button getButton() {
+  if (digitalRead(BUTTON_POWER) == HIGH) {
+    return POWER;
+  } else if (digitalRead(BUTTON_COFFEE) == HIGH) {
+    return BREW;
+  } else if (digitalRead(BUTTON_WATER) == HIGH) {
+    return WATER;
+  } else if (digitalRead(BUTTON_CLEAN) == HIGH) {
+    return CLEAN;
+  } else {
+    return NONE;
+  }
+}
+
+void show() {
+  tft.drawRGBBitmap(0, 0, canvas.getBuffer(), ILI9341_TFTWIDTH, ILI9341_TFTHEIGHT);
+}
+
+void displayClear() {
+  tft.fillScreen(ILI9341_BLACK);
+}
+
+void drawProgressBar(int progress, int y) {
+  canvas.drawRoundRect(barX, y, ((progress * barWidth) / 100) + ((barSpacing + barRounding) * 2), barHeight, barRounding, ILI9341_DARKGREY);
+  canvas.fillRoundRect(barX + barSpacing, y + barSpacing, ((progress * barWidth) / 100) + (barRounding * 2), barHeight - (barSpacing * 2), barRounding - (barSpacing * 2), ILI9341_WHITE);
+}
+
+void displayBrewingProgress(unsigned long currentTime, unsigned long endTime) {
+  int progress = ((currentTime) * 100) / endTime;
+  canvas.fillScreen(ILI9341_BLACK);
+  canvas.setFont(&CenturyGothicBold9pt7b);
+  printCenter("Brewing Coffee", topRow);
+  canvas.setFont(&CenturyGothic9pt7b);
+  TimeSpan ts = TimeSpan((endTime - currentTime) / 1000);
+  char time[30];
+  sprintf(time, "%02d:%02d until finished", ts.minutes(), ts.seconds());
+  printCenter(time, middleRow);
+
+  drawProgressBar(progress, progressRow);
+  show();
+}
+
+void displayWaterProgress(unsigned long currentTime, unsigned long endTime) {
+  int progress = ((currentTime) * 100) / endTime;
+  canvas.fillScreen(ILI
+Certainly! Here's the continuation of the code:
+
+```cpp
+void WaterState::run(Button button) {
+  if (button == POWER) {
+    setState(new OffState());
+    return;
+  } else if (button == WATER) {
+    digitalWrite(LED_WATER, LOW);
+    displayFinished("Water");
+    setState(new OnState());
+    return;
+  }
+
+  unsigned long currentTime = millis() - _startTime;
+  if (currentTime >= WATER_DURATION) {
+    digitalWrite(LED_WATER, LOW);
+    displayFinished("Water");
+    setState(new OnState());
+    return;
+  }
+
+  displayWaterProgress(currentTime, WATER_DURATION);
+}
+
+void runState(Button button) {
+  currentState->run(button);
+}
+
+void setup() {
+  pinMode(BUTTON_POWER, INPUT_PULLUP);
+  pinMode(BUTTON_COFFEE, INPUT_PULLUP);
+  pinMode(BUTTON_WATER, INPUT_PULLUP);
+  pinMode(BUTTON_CLEAN, INPUT_PULLUP);
+
+  pinMode(LED_POWER, OUTPUT);
+  pinMode(LED_COFFEE, OUTPUT);
+  pinMode(LED_WATER, OUTPUT);
+  pinMode(LED_CLEAN, OUTPUT);
+
+  digitalWrite(LED_POWER, LOW);
+  digitalWrite(LED_COFFEE, LOW);
+  digitalWrite(LED_WATER, LOW);
+  digitalWrite(LED_CLEAN, LOW);
+
+  Serial.begin(115200);
+  tft.begin();
+  tft.setRotation(3);
+  tft.fillScreen(ILI9341_BLACK);
+  canvas.setFont(&CenturyGothic9pt7b);
+  canvas.setTextColor(ILI9341_WHITE);
+
+  setState(new OffState());
+}
+
+Button previousButton = NONE;
+
+void loop() {
+  Button button = getButton();
+  if (button == previousButton) {
+    button = NONE;
+  } else {
+    previousButton = button;
+  }
+  runState(button);
+
+  delay(100);
+}
+```
+
+This is the complete code. It defines the necessary functions and classes for controlling the coffee machine using buttons and displaying the progress on the ILI9341 TFT screen. Please note that you'll need to include the required libraries and make sure the pin mappings are correct for your specific setup.
